@@ -28,7 +28,7 @@ Important: deleting a secret from the latest commit does not make it safe. Rotat
 ## 2. Reproducible development baseline
 
 - [ ] Capture and document the clean baseline build.
-- [ ] Add Maven Wrapper support.
+- [x] Add Maven Wrapper support (Maven 3.9.16, `only-script`).
 - [ ] Provide containerized local dependencies and health checks.
 - [ ] Add safe example configuration for every service.
 - [ ] Fix and document gRPC addresses and ports.
