@@ -64,7 +64,7 @@ These versions describe the current repository, not necessarily the final modern
 
 - Secrets and personal configuration require containment and rotation before the repository can be treated as safe.
 - Authentication and resource-level authorization are inconsistent across services.
-- Local setup is not reproducible from a clean checkout yet; there is no Maven Wrapper or containerized dependency stack.
+- Local setup is not reproducible from a clean checkout yet; the Maven Wrapper is available, but there is no containerized dependency stack.
 - Checkout, inventory validation, order state transitions, payment verification, and compensation are incomplete.
 - Kafka publication does not yet provide an outbox, complete event lifecycle, duplicate handling, retries, or dead-letter processing.
 - Tests provide limited business assertions and may depend on live infrastructure or providers.
@@ -77,14 +77,15 @@ These are modernization tasks, not hidden production-readiness claims.
 ### Prerequisites
 
 - JDK 17
-- Maven
 - The service-specific MySQL, MongoDB, Kafka, Elasticsearch, Eureka, and configuration dependencies
 
 The current reactor can be compiled with:
 
-```bash
-mvn clean install
+```powershell
+.\mvnw.cmd clean install
 ```
+
+On Linux or macOS, use `./mvnw clean install`. The wrapper pins Maven 3.9.16 and downloads it on first use; a global Maven installation is not required.
 
 A deterministic clean-checkout startup procedure has not been completed. Do not expect all services to start from this command alone. Containerized dependencies, safe example configuration, health checks, startup order, and smoke-test commands are planned in the reproducible-development phase.
 
