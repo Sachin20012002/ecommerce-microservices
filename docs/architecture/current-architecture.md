@@ -4,6 +4,10 @@
 
 This document records the architecture found in the repository before modernization. It describes the implementation rather than claiming production readiness.
 
+> **Historical baseline:** this document is not the architecture direction. The
+> production source of truth is [Target Architecture](target-architecture.md),
+> supported by the accepted ADRs under `docs/adr/`.
+
 ## System shape
 
 The project is a Maven reactor containing ten Spring modules. Six are business services and four provide platform or shared-contract capabilities.
@@ -66,10 +70,15 @@ Checkout and order processing do not yet form a complete consistency boundary. I
 - Checkout summary is unfinished, and order placement is primarily direct persistence of client input.
 - Payment capture, signature verification, webhook processing, and state transitions are incomplete.
 - Tests depend on live infrastructure or providers and contain few business assertions.
-- There is no containerized local environment or Maven wrapper.
+- There is no containerized local environment. A Maven Wrapper is present, but a
+  deterministic clean-checkout runtime has not been completed.
 - There are no database migrations, distributed tracing, resiliency policies, or reliable event-publication mechanism.
 
-## Architectural assessment
+## Superseded direction
 
-The boundaries and technology choices make this a useful distributed-systems learning project. They also impose more operational and consistency complexity than an application at this functional scale requires. A modular monolith would be a reasonable commercial starting point; this repository will retain service boundaries where they enable explicit learning, while requiring every retained distributed component to have a documented purpose and failure model.
+Earlier governance treated the microservice shape primarily as a learning
+constraint and deferred Kubernetes. That direction is superseded. The accepted
+production target consolidates Product and Category into Catalog, separates
+Inventory and Payment, makes Order the checkout process manager, and deploys on
+Amazon EKS using AWS-managed data and messaging services.
 

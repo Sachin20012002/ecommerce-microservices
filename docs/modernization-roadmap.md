@@ -1,95 +1,116 @@
-# Modernization Roadmap
+# Production Modernization Roadmap
 
-Each phase is implemented on one or more dedicated branches. Architecture decisions are discussed and recorded before material implementation.
+The destination is [Production Target Architecture](architecture/target-architecture.md).
+Each phase requires a dedicated work item, relevant ADR updates, tests, operational
+evidence, and reviewable migration/rollback steps. A cheaper development platform
+may reduce managed-service capacity; it does not change the application design.
 
-## Phase 0: Governance and baseline
+Known security defects in the legacy implementation are addressed while each
+affected boundary is redesigned and verified again during final hardening. This
+sequence does not authorize postponing an actively exploitable production risk;
+the legacy system is not a production deployment.
 
-- Add repository working agreement and architecture documentation.
-- Record current limitations without overstating production readiness.
-- Establish ADR and branch conventions.
-- Capture a clean baseline build when the required toolchain is available.
+## 1. Architecture/contracts and engineering baseline
 
-Exit criterion: project rules, current architecture, target direction, and priorities are reviewable.
+- Define bounded-context ownership, API/event schemas, money rules, identity
+  propagation, idempotency keys, error contracts and data-classification rules.
+- Establish reproducible builds, local dependencies, migrations, test strategy,
+  contract validation and clean-checkout verification.
 
-## Phase 1: Credential and security containment
+Exit: target contracts and baseline quality gates are executable and reviewable.
 
-- Revoke and rotate exposed Razorpay and Twilio credentials.
-- Remove secrets and personal phone numbers from source, configuration, tests, and Git history.
-- Introduce safe environment-variable configuration and `.env.example` files.
-- Prevent secret-bearing files from being committed.
-- Correct README security claims.
+## 2. Java/Spring modernization
 
-Exit criterion: secret scanning finds no committed credentials, and applications fail safely when required secrets are absent.
+- Upgrade to Java 21 and select a current compatible supported Spring Boot 3.x and
+  Spring Cloud baseline.
+- Resolve Jakarta migration, dependency compatibility, security defaults,
+  actuator behavior and container runtime requirements.
 
-## Phase 2: Reproducible development baseline
+Exit: the supported runtime builds and tests reproducibly without changing target
+business ownership.
 
-- Add Maven Wrapper and align on a supported Java runtime.
-- Add containerized MySQL, MongoDB, Kafka and Elasticsearch dependencies.
-- Define database creation and health checks.
-- Fix gRPC port/client configuration.
-- Document deterministic startup, shutdown, and smoke-test commands.
+## 3. Catalog consolidation and ownership cleanup
 
-Exit criterion: a clean checkout can build and start locally using documented commands.
+- Consolidate Product and Category into Catalog on Aurora PostgreSQL.
+- Isolate Pricing behind its own interfaces and persistence ownership within the
+  Catalog deployment.
+- Remove sellable quantity and media bytes from Catalog; define SKU and media
+  metadata contracts.
 
-## Phase 3: Identity and authorization
+Exit: Catalog, Pricing and future Inventory ownership no longer overlap.
 
-- Decide between asymmetric self-issued JWT and an OIDC provider.
-- Authenticate at the gateway without relying on gateway checks alone.
-- Enforce customer ownership in cart, checkout, and order services.
-- Restrict administrative catalog operations.
-- Add safe CORS, actuator, rate-limit, and OTP policies.
+## 4. Customer/Cart cleanup
 
-Exit criterion: automated tests prove anonymous, customer, cross-customer, and administrator behavior.
+- Move authentication toward Cognito/OIDC and place profiles/addresses in Customer
+  Profile on Aurora PostgreSQL.
+- Restrict Cart to authenticated customer intent and migrate it to DynamoDB with
+  conditional updates, versioning and an abandoned-cart policy.
+- Remove cross-service Cart provisioning and Cart-owned checkout/payment state.
 
-## Phase 4: Complete checkout and order lifecycle
+Exit: identity, profile and Cart have independent ownership and authorization.
 
-- Replace floating-point currency with `BigDecimal`.
-- Calculate authoritative checkout summaries.
-- Validate current products, prices, availability and ownership.
-- Define inventory reservation and release behavior.
-- Create idempotent orders with explicit state transitions.
-- Integrate payment through a provider interface and verify callbacks/signatures.
-- Complete or replace the cart following order confirmation.
+## 5. Inventory and Payment boundaries
 
-Exit criterion: the reference purchase flow works and its important failures are tested.
+- Create Inventory with SKU/location balances, reservations, releases, expiry and
+  an auditable adjustment model on dedicated Aurora PostgreSQL.
+- Create Payment with provider abstraction, intent, authorization, capture,
+  void/refund, signed webhook inbox, idempotency and reconciliation on dedicated
+  Aurora PostgreSQL.
 
-## Phase 5: Reliable domain events
+Exit: Catalog and Order no longer own inventory or provider payment state.
 
-- Define versioned event envelopes and topic naming.
-- Publish create, update and delete product lifecycle events.
-- Add consumer idempotency, retry and dead-letter handling.
-- Introduce an outbox or another documented atomic-publication strategy.
-- Make the search projection rebuildable.
+## 6. Order/Saga implementation
 
-Exit criterion: database commits and event delivery have documented, tested recovery behavior.
+- Make Order the durable checkout process manager with immutable price/item
+  snapshots, explicit states and request idempotency.
+- Implement reserve-inventory, authorize-payment, confirmation/rejection,
+  ambiguous-outcome recovery and compensation paths.
+- Keep payment authorization and capture as separate operations governed by
+  fulfillment/business policy.
 
-## Phase 6: Notification service
+Exit: success, rejection, timeout, duplicate and compensation paths are tested.
 
-- Record notification boundary and delivery-semantics ADRs.
-- Consume order events asynchronously.
-- Add template, email, SMS and local fake-provider abstractions.
-- Persist delivery attempts and enforce idempotency.
-- Add bounded retry and dead-letter processing.
-- Expose operational status without exposing message content or personal data.
+## 7. Outbox/Inbox and SQS/MSK event architecture
 
-Exit criterion: duplicate events and transient/permanent provider failures are tested without contacting real providers.
+- Add transactional outboxes, consumer inboxes/deduplication and idempotent side
+  effects.
+- Use SQS/DLQs for point-to-point commands and work queues; use MSK/Kafka for
+  durable domain facts, replay and fan-out.
+- Define schema compatibility, partition keys, retry classes, DLQ operations,
+  replay and backlog observability. Do not claim exactly-once processing.
 
-## Phase 7: Quality and operations
+Exit: database state and message delivery have tested recovery behavior.
 
-- Expand unit, integration, contract, and end-to-end coverage.
-- Add schema migrations.
-- Add structured logs, correlation IDs, metrics, traces, dashboards and alerts.
-- Define timeouts, circuit breaking and graceful degradation.
-- Upgrade supported framework and dependency versions through dedicated ADRs.
+## 8. Search, Notification and media
 
-Exit criterion: CI verifies the clean build and reference journey, and operational failure modes are observable.
+- Replace Filter with a rebuildable OpenSearch projection using snapshot plus
+  event catch-up.
+- Add asynchronous Notification delivery with provider fakes, deduplication,
+  bounded retries and DLQs.
+- Move media objects to S3/CloudFront while Catalog retains metadata.
 
-## Phase 8: Portfolio and interview readiness
+Exit: Search can be rebuilt and downstream latency cannot block Order confirmation.
 
-- Rewrite the README around demonstrated capabilities and limitations.
-- Add architecture and sequence diagrams.
-- Provide sanitized API examples and demo data.
-- Record scale assumptions, bottlenecks and alternative designs.
-- Prepare concise explanations of consistency, idempotency, partitioning, caching and failure recovery.
+## 9. AWS/EKS, Terraform and GitOps platform
 
-Exit criterion: every public claim is supported by running code, tests, or explicitly labeled future work.
+- Provision multi-AZ networking, EKS, ECR, IAM, data services, messaging, edge,
+  secrets and base observability through Terraform.
+- Remove Eureka and Spring Cloud Config in favor of Kubernetes discovery and
+  AWS/Kubernetes configuration.
+- Use GitHub Actions with OIDC for CI/artifacts and Argo CD GitOps for reviewed
+  production deployment, promotion and rollback.
+
+Exit: immutable artifacts can be promoted and the platform can be recreated from
+reviewed infrastructure and deployment definitions.
+
+## 10. Final hardening
+
+- Complete authorization, secret rotation, network policy, data protection,
+  dependency/container/IaC scanning and payment-security verification.
+- Add CloudWatch/OpenTelemetry/X-Ray dashboards, SLOs, alerts and runbooks.
+- Load-test access patterns before introducing Redis or changing database choices.
+- Exercise AZ/dependency failure, Saga recovery, DLQ replay, payment
+  reconciliation, backup restoration, scaling and rollback.
+
+Exit: production acceptance criteria in the target architecture are demonstrated
+by automated tests and operational evidence.

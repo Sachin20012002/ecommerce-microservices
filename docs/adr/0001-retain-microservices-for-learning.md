@@ -1,12 +1,17 @@
 # ADR-0001: Retain microservices as a learning constraint
 
-- Status: Accepted
+- Status: Superseded by ADR-0002 and ADR-0003
 - Date: 2026-08-07
 - Owners: Project maintainers
 
 ## Context
 
 The repository contains independently runnable Spring services even though its current feature scope and team size would not commercially require this operational complexity. The project is being revived both as a working portfolio system and as preparation for architecture and distributed-systems interviews.
+
+This ADR records the earlier project objective. The objective later changed to a
+production AWS/EKS target with explicitly selected bounded contexts. Its useful
+constraint—every distributed boundary must be justified—remains, but provisional
+retention of the existing services does not.
 
 ## Decision drivers
 
