@@ -4,7 +4,15 @@ This file defines the default rules for humans and coding agents working in this
 
 ## Project objective
 
-Revive this e-commerce backend as a reliable, explainable distributed-systems portfolio project. Prefer a small number of complete, tested business flows over adding disconnected technologies or unfinished services.
+Evolve this backend toward the production architecture defined in
+`docs/architecture/target-architecture.md`. The target is a secure, observable,
+failure-aware e-commerce system deployed to AWS on Amazon EKS. Prefer a small
+number of complete, tested business flows over disconnected technologies or
+unfinished services.
+
+The production architecture is the source of truth. Non-production environments
+may reduce capacity and redundancy to control cost, but must not weaken service
+boundaries, contracts, consistency, security, or application design.
 
 The primary reference journey is:
 
@@ -12,8 +20,8 @@ The primary reference journey is:
 2. Browse products.
 3. Add products to an authenticated customer's cart.
 4. Validate the cart and create an order.
-5. Process or confirm payment.
-6. publish order-domain events.
+5. Reserve inventory and authorize payment through the Order-owned checkout Saga.
+6. Confirm or reject the order and publish order-domain events.
 7. Deliver notifications asynchronously.
 
 ## Branch and change discipline
@@ -43,9 +51,19 @@ Do not introduce infrastructure solely to increase the number of technologies in
 - A service owns its data; other services must not query its database directly.
 - REST is the external API unless a documented decision replaces it.
 - Synchronous internal calls must define timeouts and failure behavior.
-- Kafka events must have a clear owner, purpose, stable name, event ID, version, and timestamp.
-- Consumers must tolerate duplicate delivery where side effects are possible.
-- Elasticsearch is a derived search index, never the product source of truth.
+- Catalog owns products, categories, and descriptive SKU data. Pricing is an
+  independent bounded context, initially isolated within Catalog.
+- Cart owns customer cart intent only. Order owns the checkout process manager;
+  Inventory and Payment remain autonomous services.
+- Kafka events must have a clear owner, purpose, stable name, event ID, aggregate
+  key, version, timestamp, correlation ID, and causation ID.
+- SQS is preferred for point-to-point commands and work queues; Kafka/MSK is the
+  durable backbone for domain facts, replay, and fan-out.
+- Producers that update a database and publish an event use an outbox or an
+  equivalent atomic change-capture mechanism. Side-effecting consumers use an
+  inbox/deduplication record and must tolerate duplicate delivery.
+- OpenSearch is a rebuildable projection, never the Catalog source of truth.
+- Do not claim exactly-once business processing.
 - Notification delivery must not be part of the synchronous order transaction.
 
 ## Security
@@ -56,10 +74,16 @@ Do not introduce infrastructure solely to increase the number of technologies in
 - Never return provider secrets through an API.
 - Authentication does not replace authorization: services must check resource ownership and roles.
 - Avoid logging tokens, OTPs, payment data, or personal information.
+- Production secrets belong in AWS Secrets Manager. Parameter Store and
+  Kubernetes ConfigMaps are for non-secret configuration.
+- Authentication moves toward Cognito/OIDC. Each service still enforces its own
+  authorization and ownership rules.
 
 ## Implementation conventions
 
-- The target runtime is Java 17 or newer; changes to it require an ADR.
+- The target runtime is Java 21 with a current compatible supported Spring Boot
+  3.x baseline. Exact Spring Boot and Spring Cloud versions are selected and
+  verified during the runtime-upgrade work item.
 - Use `BigDecimal` for money and specify currency and rounding behavior.
 - Validate API input at the boundary and return a consistent error format.
 - Avoid business logic in controllers.
@@ -67,6 +91,17 @@ Do not introduce infrastructure solely to increase the number of technologies in
 - Do not use `System.out` for application logging.
 - Database schema changes must use migrations once migration tooling is introduced.
 - Public contracts require backward-compatibility consideration.
+
+## Platform conventions
+
+- Amazon EKS/Kubernetes is the production container platform; ECR stores images.
+- Kubernetes Services/DNS replace Eureka. AWS/Kubernetes configuration mechanisms
+  replace Spring Cloud Config.
+- Terraform owns AWS infrastructure. GitHub Actions owns CI and artifact creation.
+  GitOps, preferably Argo CD, owns production Kubernetes deployment and promotion.
+- CloudWatch with OpenTelemetry and X-Ray is the core telemetry direction.
+- Redis is introduced only after a measured caching or throttling use case is
+  documented; it must not become authoritative business state.
 
 ## Testing expectations
 

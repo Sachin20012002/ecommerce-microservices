@@ -1,129 +1,119 @@
 # E-commerce Microservices
 
-This repository is a learning-focused e-commerce backend built with Java 17, Spring Boot, and Spring Cloud. It is being modernized into a reliable and explainable distributed-systems portfolio project.
+This repository is being evolved from a legacy Spring microservice prototype into
+a production-oriented e-commerce backend deployed on AWS. The current code does
+not yet implement the production design.
 
-The goal is not to collect technologies or claim production readiness. The goal is to complete, test, and document a coherent customer journey while learning the design decisions and failure modes behind each service.
+[Production Target Architecture](docs/architecture/target-architecture.md) is the
+architectural source of truth. [Current Architecture](docs/architecture/current-architecture.md)
+describes the legacy implementation only. Rationale is recorded in
+[Architecture Decision Records](docs/adr/README.md).
 
-## Project status
+## Production direction
 
-The repository is under active modernization. It contains a working microservice foundation, but the complete purchase flow, security model, payment lifecycle, reliable event delivery, local infrastructure, and automated test coverage are not finished.
+- Java 21 with a current compatible supported Spring Boot 3.x baseline; exact
+  framework versions are selected during the runtime upgrade.
+- Amazon EKS/Kubernetes and ECR, provisioned through Terraform.
+- Product and Category consolidate into Catalog on Aurora PostgreSQL.
+- Pricing is an independent bounded context, initially isolated within Catalog.
+- Customer Profile, Inventory, Order and Payment own separate transactional
+  boundaries on Aurora PostgreSQL.
+- Cart owns customer cart intent only and targets DynamoDB.
+- Search is a rebuildable OpenSearch projection; product media uses S3/CloudFront.
+- Order owns the checkout Saga. SQS/DLQs carry point-to-point commands; MSK/Kafka
+  carries durable domain facts for replay and fan-out.
+- Transactional Outbox/Inbox and idempotent consumers provide database/message
+  reliability. The system does not claim exactly-once business processing.
+- Cognito/OIDC replaces custom authentication direction. Secrets Manager holds
+  secrets; Parameter Store/ConfigMaps hold non-secret configuration.
+- GitHub Actions creates verified artifacts; Argo CD GitOps promotes them to
+  production. CloudWatch with OpenTelemetry/X-Ray provides core observability.
 
-The modernization sequence starts with credential and security containment. After that, each microservice will be reviewed and improved individually: clarify its purpose and ownership, repair its implementation, document its contracts and failure behavior, and add meaningful unit and integration tests before moving to the next service.
+Non-production AWS environments may use cheaper capacity and reduced redundancy,
+but must preserve production application boundaries, contracts and correctness.
 
-See [TODO](TODO) for the active work queue and [the modernization roadmap](docs/modernization-roadmap.md) for the broader direction.
+## Reference checkout flow
 
-## Reference customer journey
+```text
+Cart snapshot
+  -> authoritative Pricing
+  -> PENDING Order + Saga/outbox
+  -> ReserveInventory
+  -> InventoryReserved | InventoryRejected
+  -> AuthorizePayment
+  -> confirm/reject Order
+  -> compensate Payment/Inventory when required
+  -> OrderConfirmed
+  -> asynchronous downstream consumers
+```
 
-1. Register or sign in.
-2. Browse the product catalog.
-3. Add products to an authenticated customer's cart.
-4. Validate product data, prices, inventory, and cart ownership.
-5. Create an idempotent order.
-6. Process and confirm the payment outcome.
-7. Publish versioned order-domain events reliably.
-8. Deliver notifications asynchronously.
+Payment authorization and capture are separate lifecycle operations. Capture
+timing follows fulfillment and business policy rather than being performed
+blindly during checkout.
 
-## Current architecture
+## Legacy repository state
 
 ![Current e-commerce microservices architecture](images/current-architecture.svg)
 
-The Maven reactor currently contains ten modules: six business services, three platform services, and one shared gRPC contract module.
+The Maven reactor currently contains ten modules:
 
-| Module | Current purpose | Data and integrations |
-| --- | --- | --- |
-| `user-service` | OTP login, JWT creation, users, customers, and addresses | MongoDB, Twilio, Kafka |
-| `product-service` | Products, brands, types, sizes, tax, discounts, and images | MySQL, Kafka producer, gRPC server |
-| `category-service` | Category hierarchy | MySQL, gRPC client |
-| `cart-service` | Carts, cart items, and partial checkout state | MongoDB, gRPC client, Kafka |
-| `order-service` | Basic order persistence and partial payment-order creation | MySQL, Razorpay |
-| `filter-service` | Product filtering over a denormalized search model | Elasticsearch, Kafka consumer |
-| `api-gateway` | Path-based routing to registered services | Spring Cloud Gateway, Eureka |
-| `service-registry` | Service registration and discovery | Eureka |
-| `cloud-config-server` | Centralized configuration retrieval | Git-backed Spring Cloud Config |
-| `proto` | Shared product-query contracts and generated types | Protocol Buffers, gRPC |
+| Module | Legacy responsibility |
+| --- | --- |
+| `user-service` | OTP/JWT authentication, users, customers and addresses |
+| `product-service` | Products, prices, discounts, tax, images and quantity |
+| `category-service` | Category hierarchy |
+| `cart-service` | Carts plus incomplete checkout/payment state |
+| `order-service` | Basic order persistence and incomplete provider payment initiation |
+| `filter-service` | Elasticsearch product projection |
+| `api-gateway` | Eureka-backed path routing |
+| `service-registry` | Eureka discovery |
+| `cloud-config-server` | Git-backed Spring Cloud Config |
+| `proto` | Shared Product gRPC contract |
 
-Clients use JSON/HTTP through the API Gateway. Category and cart synchronously query product data over gRPC. Product creation publishes a Kafka message that updates the filter service's Elasticsearch projection. Services register with Eureka.
+The legacy implementation uses Java 17, Spring Boot 2.7, MySQL, MongoDB,
+Elasticsearch, Kafka, Eureka, Spring Cloud Config and gRPC. Checkout consistency,
+security, reliable messaging, deployment infrastructure, observability and test
+coverage are incomplete. Eureka and Spring Cloud Config are removal targets, not
+production dependencies.
 
-For implementation details and an honest assessment of current gaps, read [Current Architecture](docs/architecture/current-architecture.md). The intended direction is described in [Target Architecture](docs/architecture/target-architecture.md).
+Known legacy security problems are addressed as each affected boundary is
+redesigned and verified again during final hardening. The legacy system must not
+be represented or deployed as production-ready.
 
-## Technology stack
+## Modernization order
 
-- Java 17
-- Spring Boot 2.7
-- Spring Cloud Gateway, Config, and Netflix Eureka
-- Maven multi-module build
-- MySQL and MongoDB
-- Elasticsearch
-- Kafka
-- gRPC and Protocol Buffers
-- Hibernate / Spring Data
+1. Architecture/contracts and engineering baseline.
+2. Java/Spring modernization.
+3. Catalog consolidation and ownership cleanup.
+4. Customer/Cart cleanup.
+5. Inventory and Payment boundaries.
+6. Order/Saga implementation.
+7. Outbox/Inbox plus SQS/MSK event architecture.
+8. Search, Notification and media.
+9. AWS/EKS, Terraform and GitOps platform.
+10. Resilience, security, observability, load/failure testing and final hardening.
 
-These versions describe the current repository, not necessarily the final modernization target. Framework or runtime upgrades will be evaluated separately and recorded when they materially affect the architecture.
+See [the modernization roadmap](docs/modernization-roadmap.md) and [active work
+queue](TODO) for phase exit criteria and current progress.
 
-## Known limitations
+## Current build
 
-- Secrets and personal configuration require containment and rotation before the repository can be treated as safe.
-- Authentication and resource-level authorization are inconsistent across services.
-- Local setup is not reproducible from a clean checkout yet; the Maven Wrapper is available, but there is no containerized dependency stack.
-- Checkout, inventory validation, order state transitions, payment verification, and compensation are incomplete.
-- Kafka publication does not yet provide an outbox, complete event lifecycle, duplicate handling, retries, or dead-letter processing.
-- Tests provide limited business assertions and may depend on live infrastructure or providers.
-- Database migrations, tracing, resiliency policies, and complete operational documentation are not present.
-
-These are modernization tasks, not hidden production-readiness claims.
-
-## Build and local development
-
-### Prerequisites
-
-- JDK 17
-- The service-specific MySQL, MongoDB, Kafka, Elasticsearch, Eureka, and configuration dependencies
-
-The current reactor can be compiled with:
+The Maven Wrapper pins Maven 3.9.16. The legacy reactor currently targets JDK 17:
 
 ```powershell
 .\mvnw.cmd clean install
 ```
 
-On Linux or macOS, use `./mvnw clean install`. The wrapper pins Maven 3.9.16 and downloads it on first use; a global Maven installation is not required.
+On Linux or macOS, use `./mvnw clean install`. A deterministic local runtime and
+the Java 21/Spring Boot 3.x target build have not yet been completed.
 
-A deterministic clean-checkout startup procedure has not been completed. Do not expect all services to start from this command alone. Containerized dependencies, safe example configuration, health checks, startup order, and smoke-test commands are planned in the reproducible-development phase.
+## Governance
 
-## API documentation
-
-When the gateway and relevant services are running with the current local routing configuration, Swagger UI is expected at:
-
-- Product: `http://localhost:9191/meesho/product-microservice/swagger-ui/index.html`
-- Category: `http://localhost:9191/meesho/category-microservice/swagger-ui/index.html`
-- Filter: `http://localhost:9191/meesho/filter-microservice/swagger-ui/index.html`
-- User: `http://localhost:9191/meesho/user-microservice/swagger-ui/index.html`
-- Cart: `http://localhost:9191/meesho/cart-microservice/swagger-ui/index.html`
-- Order: `http://localhost:9191/meesho/order-microservice/swagger-ui/index.html`
-
-These endpoints will be verified and updated during each service review.
-
-## How the project will be improved
-
-Work is intentionally incremental:
-
-1. Contain credentials and establish a safe security baseline.
-2. Make the repository reproducible from a clean checkout.
-3. Select one microservice and document its purpose, data ownership, contracts, dependencies, and non-goals.
-4. Repair that service's implementation and security boundaries.
-5. Add meaningful unit and integration tests, including failure cases.
-6. Update its operational and API documentation.
-7. Complete the review before moving to the next service.
-8. Integrate the completed services into the reference customer journey.
-
-Significant choices are recorded as [Architecture Decision Records](docs/adr/README.md). The first accepted decision explains why microservices are retained as a learning constraint while acknowledging when a modular monolith would be the more practical choice.
-
-## Documentation
-
-- [Current architecture](docs/architecture/current-architecture.md)
-- [Target architecture](docs/architecture/target-architecture.md)
+- [Repository working agreement](AGENTS.md)
+- [Production target architecture](docs/architecture/target-architecture.md)
+- [Legacy current architecture](docs/architecture/current-architecture.md)
 - [Modernization roadmap](docs/modernization-roadmap.md)
 - [Architecture Decision Records](docs/adr/README.md)
-- [Repository working agreement](AGENTS.md)
 
 ## License
 

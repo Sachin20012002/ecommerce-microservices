@@ -1,91 +1,29 @@
 # Active Work Queue
 
-This file tracks the next concrete work. The broader sequence and exit criteria live in `docs/modernization-roadmap.md`.
+The ordered implementation plan is maintained in
+`docs/modernization-roadmap.md`; the production destination is
+`docs/architecture/target-architecture.md`.
 
-Rules for completing an item:
+Work on one logical branch at a time. Do not start a later phase when doing so
+would bypass an ownership, contract, correctness or security prerequisite.
 
-- Work on one logical change branch at a time.
-- Understand and document the current behavior before changing it.
-- Record material architecture decisions as ADRs.
-- Add meaningful automated tests and verify the relevant build.
-- Update documentation in the same work item.
-- Do not mark an item complete when only the happy path works.
+- [ ] 1. Architecture/contracts and engineering baseline
+- [ ] 2. Java 21 and supported Spring Boot 3.x modernization
+- [ ] 3. Catalog consolidation and ownership cleanup
+- [ ] 4. Customer Profile, Cognito/OIDC and Cart cleanup
+- [ ] 5. Dedicated Inventory and Payment boundaries
+- [ ] 6. Order-owned checkout Saga/process manager
+- [ ] 7. Transactional Outbox/Inbox with SQS commands and MSK domain facts
+- [ ] 8. Search projection, Notification and S3/CloudFront media
+- [ ] 9. AWS/EKS, Terraform, GitHub Actions and Argo CD platform
+- [ ] 10. Resilience, security, observability, load/failure testing and hardening
 
-## 1. Credential and security cleanup — next
+For every phase:
 
-- [ ] Identify secrets, credentials, personal phone numbers, and unsafe local configuration in source, tests, and configuration files.
-- [ ] Revoke and rotate every exposed Razorpay, Twilio, JWT, database, or provider credential; treat committed values as compromised.
-- [ ] Remove sensitive values from the current tree and Git history using a reviewed, coordinated procedure.
-- [ ] Replace secrets with environment-variable configuration and commit only safe examples.
-- [ ] Ensure services fail clearly and safely when required configuration is absent.
-- [ ] Add secret scanning and repository ignore rules.
-- [ ] Review logs and API responses for tokens, OTPs, payment data, provider secrets, phone numbers, and other personal data.
-- [ ] Document local secret setup without including real values.
-- [ ] Verify the cleaned repository with automated secret scanning.
-
-Important: deleting a secret from the latest commit does not make it safe. Rotation is required before history cleanup.
-
-## 2. Reproducible development baseline
-
-- [ ] Capture and document the clean baseline build.
-- [x] Add Maven Wrapper support (Maven 3.9.16, `only-script`).
-- [ ] Provide containerized local dependencies and health checks.
-- [ ] Add safe example configuration for every service.
-- [ ] Fix and document gRPC addresses and ports.
-- [ ] Document startup order, shutdown, and smoke-test commands.
-
-## 3. Service-by-service modernization
-
-Review one service at a time. Choose the order after the security baseline and local build are understood.
-
-For every service:
-
-- [ ] State its business purpose, responsibilities, and explicit non-goals.
-- [ ] Identify its source of truth and enforce database ownership.
-- [ ] Inventory REST, gRPC, and Kafka contracts.
-- [ ] Document synchronous dependencies, timeouts, and failure behavior.
-- [ ] Document events with owner, purpose, stable name, event ID, version, and timestamp.
-- [ ] Move business rules out of controllers and validate inputs at the boundary.
-- [ ] Enforce authentication, authorization, roles, and resource ownership as appropriate.
-- [ ] Define consistent errors, logs, health checks, and operational behavior.
-- [ ] Add unit tests for business rules and meaningful failure paths.
-- [ ] Add integration or contract tests using disposable or fake dependencies.
-- [ ] Update module-level setup, API, and architecture documentation.
-- [ ] Verify the module and relevant reactor build before selecting the next service.
-
-Services to review:
-
-- [ ] `user-service`
-- [ ] `product-service`
-- [ ] `category-service`
-- [ ] `cart-service`
-- [ ] `order-service`
-- [ ] `filter-service`
-- [ ] `api-gateway`
-- [ ] `service-registry`
-- [ ] `cloud-config-server`
-- [ ] `proto`
-
-## 4. Complete the reference journey
-
-- [ ] Authenticate a customer safely.
-- [ ] Browse authoritative product information.
-- [ ] Modify only the authenticated customer's cart.
-- [ ] Validate products, prices, availability, and ownership during checkout.
-- [ ] Use `BigDecimal` with explicit currency and rounding rules.
-- [ ] Define inventory reservation and release behavior.
-- [ ] Create idempotent orders with explicit state transitions.
-- [ ] Complete payment initiation, verification, callbacks, and failure handling through a provider abstraction.
-- [ ] Publish versioned order events reliably.
-- [ ] Deliver notifications asynchronously through fake/local providers in tests.
-
-## 5. Quality, operations, and portfolio readiness
-
-- [ ] Add reliable event publication, consumer idempotency, retries, and dead-letter handling.
-- [ ] Add schema migrations, structured logs, correlation IDs, metrics, and traces.
-- [ ] Define resiliency policies and graceful degradation.
-- [ ] Add CI coverage for the clean build and reference journey.
-- [ ] Verify and publish sanitized API examples and demo data.
-- [ ] Add sequence diagrams for the completed business flows.
-- [ ] Document scale assumptions, bottlenecks, consistency choices, and alternative designs.
-- [ ] Ensure every resume or LinkedIn claim is supported by running code, tests, or clearly labeled future work.
+- document intended behavior, non-goals, ownership and migration/rollback;
+- record material decisions as ADRs without rewriting accepted history;
+- add meaningful automated tests, including failure and duplicate paths;
+- verify builds and contracts from a clean checkout;
+- update operational behavior, telemetry, security and recovery documentation;
+- preserve unrelated working-tree changes and do not commit generated output or
+  secrets.
